@@ -337,11 +337,24 @@ function showWhoami() {
     return;
   }
   
+  // Handle both array and object formats
+  let authToken, ct0, twid;
+  if (Array.isArray(cookies)) {
+    authToken = cookies.find(c => c.name === 'auth_token')?.value;
+    ct0 = cookies.find(c => c.name === 'ct0')?.value;
+    twid = cookies.find(c => c.name === 'twid')?.value;
+  } else {
+    authToken = cookies.auth_token;
+    ct0 = cookies.ct0;
+    twid = cookies.twid;
+  }
+  
   console.log('Authenticated with cookies:');
-  console.log('  auth_token:', cookies.auth_token ? '✓ present' : '✗ missing');
-  console.log('  ct0:', cookies.ct0 ? '✓ present' : '✗ missing');
-  console.log('  twid:', cookies.twid ? '✓ present' : '✗ missing');
+  console.log('  auth_token:', authToken ? '✓ present' : '✗ missing');
+  console.log('  ct0:', ct0 ? '✓ present' : '✗ missing');
+  console.log('  twid:', twid ? '✓ present' : '✗ missing');
   console.log('\nCookies file:', COOKIES_FILE);
+  console.log('Cookies count:', Array.isArray(cookies) ? cookies.length : Object.keys(cookies).length);
 }
 
 // Save auth credentials

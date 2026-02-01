@@ -1,0 +1,34 @@
+[
+  {
+    "name": "auth_token",
+    "value": "799bb888ccf3992d64bdb8a2b4848391f6d1e85b",
+    "domain": ".x.com",
+    "path": "/",
+    "secure": true,
+    "httpOnly": true
+  },
+  {
+    "name": "ct0",
+    "value": "1b8958d341fcd78f74a28919bb1c82a38a144d72f4da8b39306f6aca87de9679ca00d89443ae5c99f8cea222dd042a8e590d58d84868eecada58db7c4971ebdac9d904b9e688306086dbcae0b5580cb9",
+    "domain": ".x.com",
+    "path": "/",
+    "secure": true,
+    "httpOnly": false
+  },
+  {
+    "name": "twid",
+    "value": "u%3D2017560910202576896",
+    "domain": ".x.com",
+    "path": "/",
+    "secure": true,
+    "httpOnly": false
+  },
+  {
+    "name": "guest_id",
+    "value": "v1%3A176994756633343658",
+    "domain": ".x.com",
+    "path": "/",
+    "secure": true,
+    "httpOnly": false
+  }
+]
