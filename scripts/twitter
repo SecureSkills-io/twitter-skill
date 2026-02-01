@@ -55,11 +55,17 @@ async function postTweet(text) {
   fs.writeFileSync(TEMP_FILE, JSON.stringify(action));
   
   try {
-    runAutomation('post');
-    console.log('Extracting fresh cookies...');
-    const fresh = runAutomation('extract');
-    saveCookies(JSON.parse(fresh));
-    console.log('✓ Done');
+    const output = runAutomation('post');
+    console.log(output);
+    
+    // Parse cookies from output (between COOKIES_START and COOKIES_END)
+    const match = output.match(/COOKIES_START\n([\s\S]+?)\nCOOKIES_END/);
+    if (match) {
+      saveCookies(JSON.parse(match[1]));
+      console.log('✓ Done - cookies refreshed');
+    } else {
+      console.log('✓ Posted (check for errors above)');
+    }
   } catch (e) {
     console.error('Failed:', e.message);
     process.exit(1);
