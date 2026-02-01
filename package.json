@@ -1,0 +1,30 @@
+{
+  "name": "twitter-skill",
+  "version": "1.0.0",
+  "description": "Twitter/X CLI for OpenClaw agents - post, reply, engage with automatic cookie management",
+  "main": "lib/twitter.js",
+  "bin": {
+    "twitter": "scripts/twitter",
+    "x": "scripts/twitter"
+  },
+  "scripts": {
+    "test": "echo 'Tests not implemented'"
+  },
+  "keywords": [
+    "twitter",
+    "x",
+    "social",
+    "openclaw",
+    "clawd",
+    "agent"
+  ],
+  "author": "SecureSkills",
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/SecureSkills-io/twitter-skill"
+  },
+  "engines": {
+    "node": ">=18.0.0"
+  }
+}
