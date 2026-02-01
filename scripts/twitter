@@ -1,16 +1,11 @@
 #!/usr/bin/env node
-/**
- * twitter-skill — Twitter/X CLI for OpenClaw agents
- * 
- * Auto-cookie management: injects cookies, performs action, extracts fresh cookies
- */
-
 const fs = require('fs');
 const path = require('path');
 const { execSync } = require('child_process');
 
 const CONFIG_DIR = path.join(process.env.HOME, '.config/twitter-skill');
 const COOKIES_FILE = path.join(CONFIG_DIR, 'cookies.json');
+const TEMP_FILE = path.join(CONFIG_DIR, '.temp-action.json');
 const LIB_DIR = path.join(__dirname, '..', 'lib');
 
 function ensureConfigDir() {
@@ -44,10 +39,9 @@ function formatCookies(cookies) {
   ].filter(c => c.value);
 }
 
-async function runAutomation(command, ...args) {
+function runAutomation(command) {
   const scriptPath = path.join(LIB_DIR, 'twitter-automation.js');
-  const cmd = `node "${scriptPath}" ${command} ${args.map(a => `"${a}"`).join(' ')}`;
-  return execSync(cmd, { encoding: 'utf8', timeout: 60000 });
+  return execSync(`node "${scriptPath}" ${command}`, { encoding: 'utf8', timeout: 60000 });
 }
 
 async function postTweet(text) {
@@ -55,13 +49,16 @@ async function postTweet(text) {
   if (!cookies) { console.error('No cookies. Run: twitter auth'); process.exit(1); }
   
   console.log('Posting tweet...');
-  const formatted = formatCookies(cookies);
+  
+  // Write action to temp file
+  const action = { text, cookies: formatCookies(cookies) };
+  fs.writeFileSync(TEMP_FILE, JSON.stringify(action));
   
   try {
-    await runAutomation('post', text, JSON.stringify(formatted));
+    runAutomation('post');
     console.log('Extracting fresh cookies...');
-    const freshCookies = await runAutomation('extract');
-    saveCookies(JSON.parse(freshCookies));
+    const fresh = runAutomation('extract');
+    saveCookies(JSON.parse(fresh));
     console.log('✓ Done');
   } catch (e) {
     console.error('Failed:', e.message);
@@ -70,11 +67,11 @@ async function postTweet(text) {
 }
 
 async function extractCookies() {
-  console.log('Extracting cookies...');
+  console.log('Extracting...');
   try {
-    const output = await runAutomation('extract');
+    const output = runAutomation('extract');
     saveCookies(JSON.parse(output));
-    console.log('✓ Cookies saved');
+    console.log('✓ Saved');
   } catch (e) {
     console.error('Failed:', e.message);
     process.exit(1);
@@ -86,9 +83,7 @@ function showWhoami() {
   if (!cookies) { console.log('Not authenticated'); return; }
   const isArray = Array.isArray(cookies);
   const hasAuth = isArray ? cookies.some(c => c.name === 'auth_token') : !!cookies.auth_token;
-  const hasCt0 = isArray ? cookies.some(c => c.name === 'ct0') : !!cookies.ct0;
-  console.log('Authenticated:', hasAuth && hasCt0 ? '✓' : '✗');
-  console.log('Cookies:', isArray ? cookies.length : Object.keys(cookies).length);
+  console.log('Authenticated:', hasAuth ? '✓' : '✗');
 }
 
 function saveAuth(token, ct0, twid = '', guestId = '') {
@@ -104,17 +99,13 @@ function saveAuth(token, ct0, twid = '', guestId = '') {
 
 function showHelp() {
   console.log(`
-🐦 twitter-skill — Twitter/X CLI for OpenClaw agents
+🐦 twitter-skill
 
 Commands:
-  auth <token> <ct0> [twid]     Save credentials
-  post "text"                   Post a tweet
-  extract                       Extract fresh cookies from browser
-  whoami                        Show auth status
-  help                          Show this help
-
-Env vars:
-  TWITTER_COOKIES_JSON          Full cookies JSON
+  auth <token> <ct0>         Save credentials
+  post "text"                Post a tweet
+  extract                    Extract fresh cookies
+  whoami                     Show auth status
 `);
 }
 
