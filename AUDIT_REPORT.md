@@ -15,7 +15,7 @@
 | **Overall Trust** | **8.0/10** | Solid security practices |
 | Code Quality | 8.5/10 | Clean, readable Node.js |
 | Dependencies | 9/10 | Zero runtime dependencies |
-| Network | 7/10 | X/Twitter only, HTTPS |
+| Network | 7/10 | X/Twitter only by default, optional Hermes Tweet/Xquik HTTPS backend |
 | Filesystem | 8/10 | Scoped to ~/.config/ |
 | Credentials | 8/10 | User-provided, encrypted at rest |
 | System Access | 10/10 | None (browser automation) |
@@ -30,6 +30,7 @@
    - Zero npm dependencies
    - Uses only Node.js built-ins
    - No network servers
+   - Optional Hermes Tweet/Xquik backend reads its API key from the environment
 
 2. **Secure Credential Storage**
    - Cookies stored with 600 permissions
@@ -47,9 +48,14 @@
    - Clean separation of concerns
 
 5. **Browser-Based Only**
-   - No direct API calls to X
+   - Default backend has no direct API calls to X
    - Uses existing browser session
    - Respects X's rate limits
+
+6. **Opt-In API Backend**
+   - Hermes Tweet/Xquik backend is selected only by flag or environment
+   - Write actions require `HERMES_TWEET_ENABLE_ACTIONS=true`
+   - API keys are never accepted through CLI arguments
 
 ### ⚠️ Considerations
 
@@ -74,9 +80,9 @@
 
 | Permission | Level | Justification |
 |------------|-------|---------------|
-| Network | Basic | X/Twitter HTTPS only |
+| Network | Basic | X/Twitter HTTPS by default, optional Hermes Tweet/Xquik HTTPS |
 | Filesystem | Config | ~/.config/twitter-skill/ only |
-| Credentials | User | Session cookies only |
+| Credentials | User | Session cookies or environment API key |
 | System | None | Browser automation |
 
 ---
@@ -89,6 +95,7 @@
 - [x] Scoped filesystem access
 - [x] HTTPS-only network calls
 - [x] No system-level operations
+- [x] Optional API backend is explicit and write-gated
 - [x] Audit report included
 
 ---
@@ -99,6 +106,7 @@
 2. **Monitor Rate Limits**: Watch for X blocks/suspensions
 3. **Backup Cookies**: Keep a backup of working cookies
 4. **Use Environment Variables**: For CI/CD deployments
+5. **Confirm Writes**: Confirm account, target, and text before API-backed writes
 
 ---
 
