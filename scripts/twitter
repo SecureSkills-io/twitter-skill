@@ -2,11 +2,26 @@
 const fs = require('fs');
 const path = require('path');
 const { execSync } = require('child_process');
+const {
+  actionsEnabled,
+  extractTweetId,
+  normalizeTweet,
+  normalizeTweets,
+  normalizeUser,
+  normalizeUsers,
+  parseArgs,
+  resolveBackend,
+  xquikRequest,
+} = require('../lib/xquik-client');
 
 const CONFIG_DIR = path.join(process.env.HOME, '.config/twitter-skill');
 const COOKIES_FILE = path.join(CONFIG_DIR, 'cookies.json');
 const TEMP_FILE = path.join(CONFIG_DIR, '.temp-action.json');
 const LIB_DIR = path.join(__dirname, '..', 'lib');
+const parsed = parseArgs(process.argv.slice(2));
+const FLAGS = parsed.flags;
+const POSITIONALS = parsed.positionals;
+const BACKEND = resolveBackend(FLAGS.backend || process.env.TWITTER_SKILL_BACKEND || process.env.TWITTER_BACKEND);
 
 function ensureConfigDir() {
   if (!fs.existsSync(CONFIG_DIR)) {
@@ -42,6 +57,213 @@ function formatCookies(cookies) {
 function runAutomation(command) {
   const scriptPath = path.join(LIB_DIR, 'twitter-automation.js');
   return execSync(`node "${scriptPath}" ${command}`, { encoding: 'utf8', timeout: 60000 });
+}
+
+function count() {
+  const parsedCount = Number.parseInt(FLAGS.n || FLAGS.count || 20, 10);
+  return Number.isFinite(parsedCount) ? parsedCount : 20;
+}
+
+function xquikAccount() {
+  return FLAGS.account || process.env.XQUIK_ACCOUNT || process.env.TWITTER_ACCOUNT || '';
+}
+
+function requireXquikAccount() {
+  const account = xquikAccount();
+  if (!account) {
+    console.error('XQUIK_ACCOUNT or --account is required for Hermes Tweet write actions.');
+    process.exit(1);
+  }
+  return account;
+}
+
+function requireActionsEnabled() {
+  if (!actionsEnabled()) {
+    console.error('Hermes Tweet actions are disabled.');
+    console.error('Set HERMES_TWEET_ENABLE_ACTIONS=true only after user confirmation.');
+    process.exit(1);
+  }
+}
+
+function formatTweet(tweet) {
+  if (FLAGS.json) return JSON.stringify(tweet, null, 2);
+  return [
+    `${tweet.author} (${tweet.handle})`,
+    tweet.text,
+    `Likes: ${tweet.likes}  Retweets: ${tweet.retweets}  Replies: ${tweet.replies}`,
+    `ID: ${tweet.id}`,
+    '---',
+  ].join('\n');
+}
+
+function formatUser(user) {
+  if (FLAGS.json) return JSON.stringify(user, null, 2);
+  return [
+    `${user.name} (@${user.username})${user.verified ? ' verified' : ''}`,
+    user.description || '',
+    `Followers: ${user.followers}  Following: ${user.following}`,
+    '---',
+  ].join('\n');
+}
+
+function printTweets(payload, emptyMessage) {
+  const tweets = normalizeTweets(payload);
+  if (FLAGS.json) {
+    console.log(JSON.stringify(tweets, null, 2));
+    return;
+  }
+  if (!tweets.length) {
+    console.log(emptyMessage);
+    return;
+  }
+  tweets.forEach(tweet => console.log(formatTweet(tweet)));
+}
+
+function printUsers(payload, emptyMessage) {
+  const users = normalizeUsers(payload);
+  if (FLAGS.json) {
+    console.log(JSON.stringify(users, null, 2));
+    return;
+  }
+  if (!users.length) {
+    console.log(emptyMessage);
+    return;
+  }
+  users.forEach(user => console.log(formatUser(user)));
+}
+
+function printActionResult(payload, label) {
+  if (FLAGS.json) {
+    console.log(JSON.stringify(payload, null, 2));
+    return;
+  }
+  const id = payload.id || payload.tweetId || payload.writeActionId || payload.data?.id || payload.data?.writeActionId;
+  console.log(`${label}${id ? `: ${id}` : ''}`);
+}
+
+async function runXquikCommand(cmd, args) {
+  switch (cmd) {
+    case 'auth-check':
+    case 'whoami': {
+      const account = await xquikRequest('GET', '/api/v1/account');
+      if (FLAGS.json) {
+        console.log(JSON.stringify(account, null, 2));
+      } else {
+        console.log('Hermes Tweet/Xquik backend: authenticated');
+        console.log(xquikAccount() ? `Write account: ${xquikAccount()}` : 'Write account: not set');
+        console.log(actionsEnabled() ? 'Write actions: enabled' : 'Write actions: disabled');
+      }
+      break;
+    }
+    case 'post':
+    case 'tweet': {
+      requireActionsEnabled();
+      const text = args.join(' ');
+      if (!text) { console.error('Tweet text required.'); process.exit(1); }
+      const result = await xquikRequest('POST', '/api/v1/x/tweets', undefined, {
+        account: requireXquikAccount(),
+        text,
+      });
+      printActionResult(result, 'Tweet submitted through Hermes Tweet/Xquik');
+      break;
+    }
+    case 'reply': {
+      requireActionsEnabled();
+      const id = extractTweetId(args[0]);
+      const text = args.slice(1).join(' ');
+      if (!id || !text) { console.error('Usage: twitter reply <tweet-url-or-id> "text"'); process.exit(1); }
+      const result = await xquikRequest('POST', '/api/v1/x/tweets', undefined, {
+        account: requireXquikAccount(),
+        text,
+        replyToTweetId: id,
+      });
+      printActionResult(result, 'Reply submitted through Hermes Tweet/Xquik');
+      break;
+    }
+    case 'like':
+    case 'retweet': {
+      requireActionsEnabled();
+      const id = extractTweetId(args[0]);
+      if (!id) { console.error(`Usage: twitter ${cmd} <tweet-url-or-id>`); process.exit(1); }
+      const result = await xquikRequest('POST', `/api/v1/x/tweets/${id}/${cmd}`, undefined, {
+        account: requireXquikAccount(),
+      });
+      printActionResult(result, `${cmd} submitted through Hermes Tweet/Xquik`);
+      break;
+    }
+    case 'follow': {
+      requireActionsEnabled();
+      const user = String(args[0] || '').replace(/^@/, '');
+      if (!user) { console.error('Usage: twitter follow <@handle-or-user-id>'); process.exit(1); }
+      const result = await xquikRequest('POST', `/api/v1/x/users/${encodeURIComponent(user)}/follow`, undefined, {
+        account: requireXquikAccount(),
+      });
+      printActionResult(result, 'Follow submitted through Hermes Tweet/Xquik');
+      break;
+    }
+    case 'read': {
+      const id = extractTweetId(args[0]);
+      if (!id) { console.error('Usage: twitter read <tweet-url-or-id>'); process.exit(1); }
+      console.log(formatTweet(normalizeTweet(await xquikRequest('GET', `/api/v1/x/tweets/${id}`))));
+      break;
+    }
+    case 'thread':
+    case 'replies': {
+      const id = extractTweetId(args[0]);
+      if (!id) { console.error(`Usage: twitter ${cmd} <tweet-url-or-id>`); process.exit(1); }
+      printTweets(await xquikRequest('GET', `/api/v1/x/tweets/${id}/${cmd}`), `No ${cmd} found.`);
+      break;
+    }
+    case 'search': {
+      const query = args.join(' ');
+      if (!query) { console.error('Usage: twitter search "query"'); process.exit(1); }
+      printTweets(await xquikRequest('GET', '/api/v1/x/tweets/search', {
+        q: query,
+        limit: count(),
+        queryType: FLAGS['query-type'] || 'Latest',
+      }), 'No tweets found.');
+      break;
+    }
+    case 'user': {
+      const user = String(args[0] || '').replace(/^@/, '');
+      if (!user) { console.error('Usage: twitter user <@handle-or-user-id>'); process.exit(1); }
+      console.log(formatUser(normalizeUser(await xquikRequest('GET', `/api/v1/x/users/${encodeURIComponent(user)}`))));
+      break;
+    }
+    case 'user-tweets':
+    case 'followers':
+    case 'following': {
+      const user = String(args[0] || '').replace(/^@/, '');
+      if (!user) { console.error(`Usage: twitter ${cmd} <@handle-or-user-id>`); process.exit(1); }
+      const pathSuffix = cmd === 'user-tweets' ? 'tweets' : cmd;
+      const payload = await xquikRequest('GET', `/api/v1/x/users/${encodeURIComponent(user)}/${pathSuffix}`, {
+        pageSize: count(),
+        cursor: FLAGS.cursor,
+      });
+      if (cmd === 'user-tweets') printTweets(payload, 'No tweets found.');
+      else printUsers(payload, `No ${cmd} found.`);
+      break;
+    }
+    case 'trends':
+    case 'trending': {
+      const payload = await xquikRequest('GET', '/api/v1/x/trends', {
+        woeid: FLAGS.woeid,
+        count: count(),
+      });
+      if (FLAGS.json) {
+        console.log(JSON.stringify(payload, null, 2));
+      } else {
+        console.log(JSON.stringify(payload, null, 2));
+      }
+      break;
+    }
+    case 'extract':
+      console.error('twitter extract is only available with the browser backend.');
+      process.exit(1);
+      break;
+    default:
+      showHelp();
+  }
 }
 
 async function postTweet(text) {
@@ -109,24 +331,47 @@ function showHelp() {
 
 Commands:
   auth <token> <ct0>         Save credentials
+  auth-check                 Check selected backend auth
   post "text"                Post a tweet
+  reply <tweet-url> "text"   Reply to a tweet
+  like <tweet-url>           Like a tweet
+  search "query"             Search tweets with Hermes Tweet/Xquik
+  read <tweet-url-or-id>     Read a tweet with Hermes Tweet/Xquik
+  followers <@handle>        List followers with Hermes Tweet/Xquik
   extract                    Extract fresh cookies
   whoami                     Show auth status
+
+Options:
+  --backend hermes-tweet     Use Hermes Tweet/Xquik instead of browser cookies
+  --account @handle          Account for Hermes Tweet/Xquik write actions
+  --json                     Print JSON output
+  -n <count>                 Result count
 `);
 }
 
 async function main() {
-  const cmd = process.argv[2];
+  const cmd = POSITIONALS[0];
+  const args = POSITIONALS.slice(1);
+
+  if (BACKEND === 'xquik') {
+    await runXquikCommand(cmd, args);
+    return;
+  }
+
   switch (cmd) {
     case 'auth':
-      if (process.argv[3] === '--cookies-json') {
-        saveCookies(JSON.parse(process.argv[4]));
-      } else if (process.argv[3] && process.argv[4]) {
-        saveAuth(process.argv[3], process.argv[4], process.argv[5], process.argv[6]);
+      if (FLAGS['cookies-json']) {
+        saveCookies(JSON.parse(FLAGS['cookies-json']));
+      } else if (args[0] && args[1]) {
+        saveAuth(args[0], args[1], args[2], args[3]);
       } else showHelp();
       break;
-    case 'post': await postTweet(process.argv[3]); break;
+    case 'post':
+    case 'tweet':
+      await postTweet(args.join(' '));
+      break;
     case 'extract': await extractCookies(); break;
+    case 'auth-check':
     case 'whoami': showWhoami(); break;
     default: showHelp();
   }

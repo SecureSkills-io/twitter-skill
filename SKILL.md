@@ -40,6 +40,21 @@ export TWITTER_TWID="your_twid"
 
 Cookies are stored in `~/.config/twitter-skill/cookies.json` with 600 permissions.
 
+## Optional Hermes Tweet/Xquik Backend
+
+Use this backend when the agent needs structured X search, tweet reads, replies,
+followers, following, trends, or approval-gated write actions without browser
+cookie handling.
+
+```bash
+export TWITTER_SKILL_BACKEND=hermes-tweet
+export XQUIK_API_KEY=xq_...
+export XQUIK_ACCOUNT=@your_account
+```
+
+Set `HERMES_TWEET_ENABLE_ACTIONS=true` only after the user confirms a write
+action.
+
 ## Commands
 
 ### Post a Tweet
@@ -47,6 +62,7 @@ Cookies are stored in `~/.config/twitter-skill/cookies.json` with 600 permission
 ```bash
 twitter post "Hello world!"
 twitter tweet "Hello world!"  # alias
+twitter post "Hello world!" --backend hermes-tweet --account @me
 ```
 
 ### Post a Thread
@@ -76,12 +92,28 @@ Third tweet
 
 ```bash
 twitter reply https://x.com/user/status/123456 "Great post!"
+twitter reply 123456 "Great post!" --backend hermes-tweet --account @me
 ```
 
 ### Like a Tweet
 
 ```bash
 twitter like https://x.com/user/status/123456
+twitter like 123456 --backend hermes-tweet --account @me
+```
+
+### Search and Read with Hermes Tweet/Xquik
+
+```bash
+twitter search "AI agents" -n 25 --backend hermes-tweet
+twitter read https://x.com/user/status/123456 --backend hermes-tweet
+twitter thread 123456 --backend hermes-tweet
+twitter replies 123456 --backend hermes-tweet
+twitter user @openai --backend hermes-tweet
+twitter user-tweets @openai -n 25 --backend hermes-tweet
+twitter followers @openai -n 100 --json --backend hermes-tweet
+twitter following @openai -n 100 --json --backend hermes-tweet
+twitter trends --woeid 23424977 --backend hermes-tweet
 ```
 
 ### Extract Fresh Cookies
@@ -110,15 +142,18 @@ twitter whoami
 ## Security
 
 - Cookies stored with 600 permissions (owner read/write only)
-- No external API dependencies
+- Default browser backend has no external API dependencies
 - Uses existing browser session (CDP on port 18800)
 - Respects X's rate limits with built-in delays
+- Hermes Tweet/Xquik backend reads `XQUIK_API_KEY` from the environment only
+- Confirm account, tweet ID, user handle, and text before any write action
 
 ## Requirements
 
 - Node.js 18+
 - Playwright browser running on CDP port 18800
 - Valid X/Twitter session cookies
+- Optional: `XQUIK_API_KEY` for Hermes Tweet/Xquik backend
 
 ## Trust Score
 
@@ -127,6 +162,7 @@ twitter whoami
 - Filesystem: Config only — ~/.config/twitter-skill/
 - Credentials: User-provided — Cookie-based auth
 - System: None — Browser automation only
+- Optional backend: Hermes Tweet/Xquik HTTPS API with environment API key
 
 ---
 
